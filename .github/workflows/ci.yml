@@ -6,14 +6,21 @@ on:
   pull_request:
     branches: [main]
 
-# Least privilege: the workflow only needs to read the repository contents.
+# Least privilege by default: jobs can only read the repository contents.
+# The publish job additionally requests id-token: write for AWS OIDC.
 permissions:
   contents: read
 
-# Cancel an in-progress run when a newer commit is pushed to the same branch or PR.
+# Cancel superseded pull request runs. Runs on main are never cancelled,
+# so an image push that has already started is allowed to finish.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ROLE_ARN: arn:aws:iam::851226124537:role/GitHubActionsECRPushRole
+  ECR_REPOSITORY: ci-cd-pipeline-assignment
 
 jobs:
   build-and-test:
@@ -44,3 +51,42 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  publish-image:
+    name: Build and push Docker image to Amazon ECR
+    # Only after all CI checks pass, and only for pushes to main.
+    # Pull requests never reach this job, so they never authenticate to AWS.
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # check out the repository
+      id-token: write # request the GitHub OIDC token used to assume the AWS role
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: github-actions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build --tag "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "Pushed image: \`$IMAGE_URI\`" >> "$GITHUB_STEP_SUMMARY"
