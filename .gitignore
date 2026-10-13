@@ -28,3 +28,7 @@ secrets*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local AWS IAM policy documents
+github-ecr-policy.json
+github-oidc-trust.json
