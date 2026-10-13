@@ -6,7 +6,7 @@ import pkg from '../package.json';
 const app = createApp();
 
 describe('GET /', () => {
-  it('returns the app name, version and a message', async () => {
+  it('returns the app name, version and the welcome message', async () => {
     const res = await request(app).get('/');
 
     expect(res.status).toBe(200);
@@ -14,9 +14,8 @@ describe('GET /', () => {
     expect(res.body).toEqual({
       name: pkg.name,
       version: pkg.version,
-      message: expect.any(String),
+      message: 'Welcome to the updated CI/CD pipeline demo API',
     });
-    expect(res.body.message.length).toBeGreaterThan(0);
   });
 });
 

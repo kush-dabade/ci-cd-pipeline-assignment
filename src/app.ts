@@ -11,7 +11,7 @@ export function createApp(): Express {
     res.json({
       name: config.appName,
       version: config.version,
-      message: 'Welcome to the CI/CD pipeline demo API',
+      message: 'Welcome to the updated CI/CD pipeline demo API',
     });
   });
 
